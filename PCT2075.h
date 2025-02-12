@@ -30,6 +30,7 @@ public:
 
   bool      begin();
   bool      isConnected();
+  uint8_t   getAddress();  //  convenience.
 
   //  CONFIGURATION
   void      setConfiguration(uint8_t mask);

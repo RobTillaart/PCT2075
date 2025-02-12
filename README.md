@@ -21,12 +21,28 @@ Arduino library for I2C PCT2075 temperature sensor / thermal watchdog.
 **Warning:** This library is not tested with hardware yet. 
 So use with care, feedback welcome.
 
+The PCT2075 is a temperature sensor with a range of -55°C - 125°C,
+an accuracy of ±2°C and 11 bit precision, steps = 0.125°C.
+In the range -25°C - 100°C, the accuracy is ±1°C.
+The sensor is a drop in replacement for the LM75.
+
+The special feature of this sensor is an output pin OS = Overflow Shutdown,
+which can be used to trigger external events based upon two different 
+temperature levels. Thus for me OS stands for Output Signal.
+
+This OS pin can be used in two modi, first and default is comparator 
+mode, which is ideal to control e.g. a cooling or heating device.
+This signal can also be used for interrupts, either CHANGE, FALLING
+or RISING edge.
+The second mode is an interrupt mode which can be used to trigger
+a microprocessor with a short pulse.
+Check the datasheet for the details.
 
 
+### Please report your experiences.
 
-
-
-Feedback as always, is welcome. Please open an issue.
+If you have a PCT2075 device, please let me know your experiences
+with the sensor and this (or other) library.
 
 
 ### I2C bus reset
@@ -37,20 +53,19 @@ The library does not support this.
 
 ### Related
 
+- https://github.com/RobTillaart/DHTNew DHT11/22 etc humidity / temperature sensor
+- https://github.com/RobTillaart/DS18B20_RT OneWire temperature sensor
 - https://github.com/RobTillaart/PCT2075 this library
-- https://github.com/RobTillaart/Temperature temperature related functions.
+- https://github.com/RobTillaart/SHT31 Sensirion humidity / temperature sensor
+- https://github.com/RobTillaart/Temperature (conversions, dewPoint, heat index etc.)
+
+There are more temperature libraries, just follow the links.
 
 
 ### Compatibles
 
-The PCT2075 is a replacement for the LM75, so this might be compatible.
-To be verified.
-
-
-### Please report your experiences.
-
-If you have a PCT2075 device, please let me know your experiences
-with the sensor and this (or other) library.
+The PCT2075 is a drop in replacement for the LM75, so this sensor
+is expected to be compatible. To be verified.
 
 
 ## Interface
@@ -61,10 +76,11 @@ with the sensor and this (or other) library.
 
 ### Constructor
 
-- **PCT2075(const uint8_t address = 0x30, TwoWire \* wire = &Wire)** set address to
+- **PCT2075(const uint8_t address, TwoWire \* wire = &Wire)** set address to
 reflect the A0..A2 pin. See table 5 + 6, page 8 datasheet for 27 possible addresses.
 - **bool begin()** checks if address can be found on the I2C bus.
 - **bool isConnected()** checks if address can be found on the I2C bus.
+- **uint8_t getAddress()** returns address set.
 
 
 ### Configuration
@@ -84,22 +100,22 @@ COnfiguration register
 
 Some wrapper functions for easy control.
 
-- **setFQUE(uint8_t value)** 0..3, see table below.
+- **setOSFQUE(uint8_t value)** 0..3, see table below.
 See page 6 datasheet for details.
 - **setOSPolarityLOW()** idem.
 - **setOSPolarityHIGH()** idem.
-- **setComparatorMode()** idem.
-- **setInterruptMode()** idem.
+- **setOSComparatorMode()** idem.
+- **setOSInterruptMode()** idem.
 - **wakeUp()** idem, starts making measurements. See datasheet 7.1.
 Note it takes ~28 milliseconds to get a first new temperature reading.
 - **shutDown()** idem, stops making measurements.
 
 |  OS_F_QUE  |  times  |  notes  |
 |:----------:|:-------:|:--------|
-|     0      |   1x    |  default
+|     0      |   1x    |  default, OS triggers on first occurrence
 |     1      |   2x    |
 |     2      |   4x    |
-|     3      |   6x    |
+|     3      |   6x    |  OS triggers on sixth occurrence
 
 
 ### Temperature
@@ -112,6 +128,8 @@ can be set with **setSampleDelay()**, see below.
 The sampling process can be stopped and restarted by using **shutDown()**
 and **wakeUp()**, see above.
 
+Reading the temperature does not affect the conversion in progress.
+
 
 ### Operating mode OS, interrupt vs comparator.
 
@@ -120,20 +138,18 @@ interrupts or follow hysteresis to control an external device.
 The OS pin is default HIGH, and goes LOW when "active".
 The polarity can be changed in the configuration register (see above).
 
-The behaviour can be tuned by **setFQUE(value)** in the configuration
+The behaviour can be tuned by **setOSFQUE(value)** in the configuration
 register. This defines the number of times a threshold needs to be crossed
 before the OS pin toggles. See page 6 datasheet.  
 
-
-
-In comparator mode the OS pin goes 
+In **comparator mode** the OS pin goes 
 - LOW, when the temperature RISES above the configured overTemperature.
 - HIGH, when the temperature FALLS below the configured hysteresis temperature.
 
 This makes the comparator mode ideal e.g. to **directly** control a fan, a 
 cooling or heating system. Additional electronics like a relay might be needed.
 
-In interrupt mode the OS pin gives a LOW pulse when the temperature
+In **interrupt mode** the OS pin gives a LOW pulse when the temperature
 - RISES above the configured overTemperature, or
 - FALLS below the configured hysteresis temperature.
 
@@ -142,11 +158,14 @@ can take an action, e.g. send a message to people or write it to a log file.
 
 Read datasheet section 7.1 for details
 
-- **void setHysteresis(float temp)** set lower temperature trigger level
-- **float getHysteresis()** get current set level.
+- **void setHysteresis(float temp)** set lower temperature trigger level.
+- **float getHysteresis()** get current set level. Default = 75°C.
 
-- **void setOverTemperature(float temp)** set upper temperature trigger level
-- **float getOverTemperature()** get current set level.
+- **void setOverTemperature(float temp)** set upper temperature trigger level.
+- **float getOverTemperature()** get current set level. Default = 80°C.
+
+It is not known how the sensor behaves when the lower temperature is set
+above the upper temperature. The library does not prevent this.
 
 
 ### Sample frequency
@@ -177,12 +196,19 @@ So timing can be set from 100 ms to 3.1 seconds.
 
 - extend error handling
 - add examples
+- add **void setOffset()** and **float getOffset()** to calibrate temperature.
+  - drawback is that this does not affect the two threshold registers.
+  - can cause confusion (so at least a warning should be in place)
+- getters for configuration fields.
+  - **uint8_t getXYZ()**
+  - **bool isAwake()**
 
 #### Wont
 
 - section 7.2.1 => controllable reset?
   - blocking for 35 ms? ==> User can do that.
 - detailed getters for configuration register.
+
 
 ## Support
 

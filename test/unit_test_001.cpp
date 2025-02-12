@@ -50,7 +50,7 @@ unittest(test_constants)
 
 unittest(test_constructor)
 {
-  PCT2075 pct;
+  PCT2075 pct(0x30);
 
   Wire.begin();
 

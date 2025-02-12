@@ -37,6 +37,12 @@ bool PCT2075::isConnected()
 }
 
 
+uint8_t PCT2075::getAddress()
+{
+  return _address;
+}
+
+
 /////////////////////////////////////////////////////////
 //
 //  CONFIGURATION
